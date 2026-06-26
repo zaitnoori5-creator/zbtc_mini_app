@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ps">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZBTC Mini App</title>
+  <style>
+    body{font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f172a;color:#e6eef8;margin:0}
+    .card{background:linear-gradient(180deg,#0b1220 0%, #07122a 100%);padding:28px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6);width:360px}
+    h1{margin:0 0 8px 0;font-size:20px}
+    p{margin:0 0 16px 0;color:#a8c0d8}
+    .price{font-size:36px;font-weight:700;margin:10px 0}
+    .meta{font-size:13px;color:#8fa6c2;margin-bottom:12px}
+    .controls{display:flex;gap:8px}
+    button{background:#2563eb;color:white;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    button.secondary{background:#1f2937}
+    input[type="number"]{width:80px;padding:8px;border-radius:8px;border:1px solid #233444;background:#071729;color:#e6eef8}
+    .notice{margin-top:12px;color:#ffdd99;font-size:13px}
+    a.link{color:#82cfff;text-decoration:none}
+    footer{margin-top:14px;font-size:12px;color:#7f9fbf}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ZBTC Mini App</h1>
+    <p>د ZBTC اوسنی USD بیه ښايي (CoinGecko څخه). که ZBTC په CoinGecko کې ونه موندل شي نو تاسو کولی شئ لاسي بیه ورکړئ.</p>
+
+    <div class="meta">توکن: <strong id="tokenName">ZBTC</strong> · تازه کېدنې وقفه: <strong id="intervalLabel">30s</strong></div>
+    <div class="price" id="price">—</div>
+    <div class="meta" id="updated">Last update: —</div>
+
+    <div style="margin-top:8px" class="controls">
+      <button id="refreshBtn">تازه کول</button>
+      <button class="secondary" id="toggleSource">د سرچینې حالت بدلول</button>
+      <input id="intervalInput" type="number" min="5" value="30">s
+    </div>
+
+    <div class="notice" id="notice" style="display:none"></div>
+
+    <div style="margin-top:12px">
+      <label style="font-size:13px;color:#9fb7d6">که CoinGecko توکن ونه موندل شو، لاسي بیه داخل کړئ (USD):</label>
+      <div style="margin-top:6px;display:flex;gap:8px">
+        <input id="manualPrice" type="number" step="0.01" placeholder="مثلاً 123.45" style="flex:1;padding:8px;border-radius:8px;border:1px solid #233444;background:#071729;color:#e6eef8">
+        <button id="applyManual">اعمال</button>
+      </div>
+    </div>
+
+    <footer>د ریپو URL: <a class="link" href="https://github.com/zaitnoori5-creator/zbtc_mini_app" target="_blank">zaitnoori5-creator/zbtc_mini_app</a></footer>
+  </div>
+
+<script>
+const QUERY = 'zbtc';
+let updateInterval = 30000;
+let timer = null;
+let coinId = null;
+let useCoinGecko = true;
+
+const priceEl = document.getElementById('price');
+const updatedEl = document.getElementById('updated');
+const noticeEl = document.getElementById('notice');
+const intervalInput = document.getElementById('intervalInput');
+const intervalLabel = document.getElementById('intervalLabel');
+
+async function searchCoin(query){
+  try{
+    const res = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`);
+    if(!res.ok) throw new Error('Network error');
+    const data = await res.json();
+    return data.coins || [];
+  }catch(e){
+    console.error('searchCoin error', e);
+    return [];
+  }
+}
+
+async function fetchPriceById(id){
+  try{
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`);
+    if(!res.ok) throw new Error('Network error');
+    const data = await res.json();
+    return data[id] && data[id].usd ? data[id].usd : null;
+  }catch(e){
+    console.error('fetchPriceById error', e);
+    return null;
+  }
+}
+
+async function update(){
+  noticeEl.style.display = 'none';
+  if(useCoinGecko){
+    if(!coinId){
+      const coins = await searchCoin(QUERY);
+      if(coins.length === 0){
+        noticeEl.textContent = 'CoinGecko کې ZBTC ونه موندل شو.';
+        noticeEl.style.display = 'block';
+        priceEl.textContent = '—';
+        updatedEl.textContent = 'Last update: —';
+        return;
+      }
+      // Try to find exact symbol match
+      const match = coins.find(c => c.symbol && c.symbol.toLowerCase() === QUERY.toLowerCase()) || coins[0];
+      coinId = match.id;
+      document.getElementById('tokenName').textContent = match.name + ' (' + match.symbol.toUpperCase() + ')';
+    }
+    const price = await fetchPriceById(coinId);
+    if(price === null){
+      noticeEl.textContent = 'د قیمت ترلاسه کولو کې ستونزه راغله.';
+      noticeEl.style.display = 'block';
+      priceEl.textContent = '—';
+      updatedEl.textContent = 'Last update: —';
+      return;
+    }
+    priceEl.textContent = '$' + price.toLocaleString();
+    updatedEl.textContent = 'Last update: ' + new Date().toLocaleString();
+  } else {
+    // Using manual price
+    const manual = document.getElementById('manualPrice').value;
+    if(!manual){
+      noticeEl.textContent = 'مهرباني وکړئ لاسي بیه داخل کړئ او "اعمال" تڼۍ فشار کړئ.';
+      noticeEl.style.display = 'block';
+      return;
+    }
+    priceEl.textContent = '$' + Number(manual).toLocaleString();
+    updatedEl.textContent = 'Last update: ' + new Date().toLocaleString() + ' (manual)';
+  }
+}
+
+function startTimer(){
+  if(timer) clearInterval(timer);
+  timer = setInterval(update, updateInterval);
+}
+
+document.getElementById('refreshBtn').addEventListener('click', ()=>{ update(); });
+
+document.getElementById('toggleSource').addEventListener('click', ()=>{
+  useCoinGecko = !useCoinGecko;
+  document.getElementById('tokenName').textContent = useCoinGecko ? 'ZBTC' : 'ZBTC (manual)';
+  noticeEl.style.display = 'none';
+  update();
+});
+
+document.getElementById('applyManual').addEventListener('click', ()=>{
+  useCoinGecko = false;
+  document.getElementById('tokenName').textContent = 'ZBTC (manual)';
+  update();
+});
+
+intervalInput.addEventListener('change', ()=>{
+  let s = Number(intervalInput.value);
+  if(isNaN(s) || s < 5) s = 5;
+  updateInterval = s * 1000;
+  intervalLabel.textContent = s + 's';
+  startTimer();
+});
+
+// initial
+update();
+startTimer();
+</script>
+</body>
+</html>
